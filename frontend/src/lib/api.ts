@@ -1,6 +1,6 @@
 import { TicketRequest, TicketResponse } from '../types/ticket';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5069';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 export async function analyzeTicket(request: TicketRequest): Promise<TicketResponse> {
   const response = await fetch(`${API_BASE_URL}/api/Ticket/analyze`, {

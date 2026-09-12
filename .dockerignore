@@ -20,4 +20,5 @@
 **/out
 **/secrets.dev.yaml
 **/values.dev.yaml
-frontend/
+frontend/node_modules/
+frontend/.next/

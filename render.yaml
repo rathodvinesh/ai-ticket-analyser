@@ -1,0 +1,33 @@
+services:
+  # Backend ASP.NET Core API Service
+  - type: web
+    name: ai-ticket-backend
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: GroqApi__ApiKey
+        sync: false # Set in Render Dashboard
+      - key: GroqApi__BaseUrl
+        value: https://api.groq.com/openai/v1/
+      - key: GroqApi__Model
+        value: llama-3.3-70b-versatile
+      - key: UseMockAi
+        value: "false"
+
+  # Frontend Next.js Web Application
+  - type: web
+    name: ai-ticket-frontend
+    env: node
+    plan: free
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        fromService:
+          type: web
+          name: ai-ticket-backend
+          property: host

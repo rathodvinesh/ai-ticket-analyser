@@ -1,0 +1,6 @@
+@AI_ticket_analyzer_HostAddress = http://localhost:5069
+
+GET {{AI_ticket_analyzer_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

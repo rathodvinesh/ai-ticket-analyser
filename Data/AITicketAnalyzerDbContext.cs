@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AI_ticket_analyzer.Models;
 using Microsoft.EntityFrameworkCore;
@@ -34,7 +34,7 @@ public partial class AITicketAnalyzerDbContext : DbContext
             entity.Property(e => e.Aisummary)
                 .HasMaxLength(500)
                 .HasColumnName("AISummary");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.RawTitle).HasMaxLength(500);
         });
 

@@ -7,7 +7,17 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddDbContext<AITicketAnalyzerDbContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DbString"));
+    var connStr = builder.Configuration.GetConnectionString("DbString") ?? string.Empty;
+    if (connStr.Contains("Host=", StringComparison.OrdinalIgnoreCase) ||
+        connStr.Contains("postgres", StringComparison.OrdinalIgnoreCase) ||
+        connStr.Contains("sslmode", StringComparison.OrdinalIgnoreCase))
+    {
+        options.UseNpgsql(connStr);
+    }
+    else
+    {
+        options.UseSqlServer(connStr);
+    }
 });
 
 var useMockAi = builder.Configuration.GetValue<bool>("UseMockAi");
@@ -58,6 +68,17 @@ app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
-app.MapControllers();
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AITicketAnalyzerDbContext>();
+        db.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"DB Auto-Init Note: {ex.Message}");
+    }
+}
 
 app.Run();

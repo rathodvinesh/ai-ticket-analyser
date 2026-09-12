@@ -8,11 +8,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AITicketAnalyzerDbContext>(options =>
 {
     var connStr = builder.Configuration.GetConnectionString("DbString") ?? string.Empty;
-    if (connStr.Contains("Host=", StringComparison.OrdinalIgnoreCase) ||
-        connStr.Contains("postgres", StringComparison.OrdinalIgnoreCase) ||
+    if (connStr.Contains("postgres", StringComparison.OrdinalIgnoreCase) ||
+        connStr.Contains("Host=", StringComparison.OrdinalIgnoreCase) ||
         connStr.Contains("sslmode", StringComparison.OrdinalIgnoreCase))
     {
-        options.UseNpgsql(connStr);
+        var formattedConnStr = ConvertPostgresUrlToConnectionString(connStr);
+        options.UseNpgsql(formattedConnStr);
     }
     else
     {
@@ -88,3 +89,28 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static string ConvertPostgresUrlToConnectionString(string url)
+{
+    if (url.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
+        url.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var userInfo = uri.UserInfo.Split(':');
+            var username = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : "";
+            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+            var host = uri.Host;
+            var port = uri.Port > 0 ? uri.Port : 5432;
+            var database = uri.AbsolutePath.TrimStart('/');
+
+            return $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Postgres URL parse warning: {ex.Message}");
+        }
+    }
+    return url;
+}

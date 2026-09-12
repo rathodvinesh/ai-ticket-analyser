@@ -1,6 +1,8 @@
 using AI_ticket_analyzer.Data;
 using AI_ticket_analyzer.Service;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -80,7 +82,18 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AITicketAnalyzerDbContext>();
-        db.Database.EnsureCreated();
+        var dbCreator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
+        if (dbCreator != null)
+        {
+            if (!dbCreator.Exists())
+            {
+                dbCreator.Create();
+            }
+            if (!dbCreator.HasTables())
+            {
+                dbCreator.CreateTables();
+            }
+        }
     }
     catch (Exception ex)
     {

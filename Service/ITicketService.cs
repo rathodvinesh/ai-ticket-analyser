@@ -1,9 +1,10 @@
 ﻿using AI_ticket_analyzer.Models;
+using AI_ticket_analyzer.Models.DTO;
 
 namespace AI_ticket_analyzer.Service
 {
     public interface ITicketService
     {
-        Task<TicketResponse> AnalyzeTicketAsync(string title,string description);
+        Task<AnalyzeTicketResponse> AnalyzeTicketAsync(string title,string description);
     }
 }

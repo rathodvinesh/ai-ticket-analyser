@@ -1,5 +1,6 @@
 using AI_ticket_analyzer.Data;
 using AI_ticket_analyzer.Models;
+using AI_ticket_analyzer.Models.DTO;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,7 +38,7 @@ namespace AI_ticket_analyzer.Controllers
         }
 
         [HttpPost("analyze")]
-        public async Task<IActionResult> AnalyzeTicket([FromBody] TicketRequest request)
+        public async Task<IActionResult> AnalyzeTicket([FromBody] AnalyzeTicketRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Description))
             {

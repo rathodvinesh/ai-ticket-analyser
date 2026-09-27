@@ -1,13 +1,14 @@
 ﻿using AI_ticket_analyzer.Models;
+using AI_ticket_analyzer.Models.DTO;
 using AI_ticket_analyzer.Service;
 
 public class MockTicketAiService : ITicketService
 {
-    public Task<TicketResponse> AnalyzeTicketAsync(string title,string description)
+    public Task<AnalyzeTicketResponse> AnalyzeTicketAsync(string title,string description)
     {
         var text = $"{title} {description}".ToLower();
 
-        var result = new TicketResponse
+        var result = new AnalyzeTicketResponse
         {
             Summary = GenerateSummary(title),
             Category = DetectCategory(text),

@@ -1,4 +1,5 @@
 using AI_ticket_analyzer.Models;
+using AI_ticket_analyzer.Models.DTO;
 using System.Text.Json;
 
 namespace AI_ticket_analyzer.Service
@@ -17,7 +18,7 @@ namespace AI_ticket_analyzer.Service
             _model = string.IsNullOrWhiteSpace(config["GroqApi:Model"]) ? "groq/compound-mini" : config["GroqApi:Model"]!;
         }
 
-        public async Task<TicketResponse> AnalyzeTicketAsync(string title, string description)
+        public async Task<AnalyzeTicketResponse> AnalyzeTicketAsync(string title, string description)
         {
             if (httpClient.BaseAddress == null)
             {
@@ -74,12 +75,12 @@ namespace AI_ticket_analyzer.Service
            .GetProperty("content")
            .GetString();
 
-            return JsonSerializer.Deserialize<TicketResponse>(
+            return JsonSerializer.Deserialize<AnalyzeTicketResponse>(
                 content!,
                 new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
-                }) ?? new TicketResponse();
+                }) ?? new AnalyzeTicketResponse();
         }
 
         private string BuildPrompt(string title, string description)

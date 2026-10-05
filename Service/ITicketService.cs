@@ -5,6 +5,6 @@ namespace AI_ticket_analyzer.Service
 {
     public interface ITicketService
     {
-        Task<AnalyzeTicketResponse> AnalyzeTicketAsync(string title,string description);
+        Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest request);
     }
 }

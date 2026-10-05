@@ -31,7 +31,8 @@ if (useMockAi)
 }
 else
 {
-    builder.Services.AddHttpClient<ITicketService, TicketService>(client =>
+    builder.Services.AddScoped<ITicketService, TicketService>();
+    builder.Services.AddHttpClient<IAiClient, GroqClient>(client =>
     {
         var baseUrl = builder.Configuration["GroqApi:BaseUrl"] ?? "https://api.groq.com/openai/v1/";
         client.BaseAddress = new Uri(baseUrl);

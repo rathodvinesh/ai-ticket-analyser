@@ -4,13 +4,13 @@ using AI_ticket_analyzer.Service;
 
 public class MockTicketAiService : ITicketService
 {
-    public Task<AnalyzeTicketResponse> AnalyzeTicketAsync(string title,string description)
+    public Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest request)
     {
-        var text = $"{title} {description}".ToLower();
+        var text = $"{request.Title} {request.Description}".ToLower();
 
         var result = new AnalyzeTicketResponse
         {
-            Summary = GenerateSummary(title),
+            Summary = GenerateSummary(request.Title),
             Category = DetectCategory(text),
             Priority = DetectPriority(text)
         };

@@ -45,32 +45,20 @@ namespace AI_ticket_analyzer.Controllers
                 return BadRequest("Title and Description are required.");
             }
 
-            var result = await _groqService.AnalyzeTicketAsync(request.Title, request.Description);
-
-            // Save analyzed ticket to SQL Database
-            try
+            if(request.Title.Length > 200)
             {
-                var ticket = new SupportTicket
-                {
-                    RawTitle = request.Title,
-                    RawDescription = request.Description,
-                    Aisummary = result.Summary,
-                    Aicategory = result.Category,
-                    Aipriority = result.Priority,
-                    CreatedAt = DateTime.UtcNow,
-                    AiprocessedAt = DateTime.UtcNow
-                };
+                return BadRequest("Title cannot exceed 200 characters.");
+            }
 
-                _dbContext.SupportTickets.Add(ticket);
-                await _dbContext.SaveChangesAsync();
-            }
-            catch (Exception ex)
+            if(request.Description.Length > 5000)
             {
-                // Log DB save error without failing AI result response
-                Console.WriteLine($"DB Save Warning: {ex.Message}");
+                return BadRequest("Description cannot exceed 5000 characters.");
             }
+
+            var result = await _groqService.AnalyzeTicketAsync(request);
 
             return Ok(result);
+            
         }
     }
 }

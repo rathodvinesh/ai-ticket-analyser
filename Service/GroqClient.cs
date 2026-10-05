@@ -7,7 +7,6 @@ namespace AI_ticket_analyzer.Service
     {
         private readonly HttpClient httpClient;
         private readonly string _apiKey;
-        private readonly string _baseuri;
         private readonly string _model;
         private readonly ILogger<GroqClient> _logger;
 
@@ -15,23 +14,16 @@ namespace AI_ticket_analyzer.Service
         {
             this.httpClient = httpClient;
             _apiKey = config["GroqApi:ApiKey"] ?? throw new ArgumentNullException(nameof(config), "ApiKey is not configured.");
-            _baseuri = config["GroqApi:BaseUrl"]?? throw new ArgumentNullException(nameof(config), "BaseUrl is not configured.");
             _model = config["GroqApi:Model"] ?? throw new ArgumentNullException(nameof(config), "Model is not configured.");
             _logger = logger;
         }
 
         public async Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest analyzeRequest)
         {
-            if (httpClient.BaseAddress == null)
-            {
-                httpClient.BaseAddress = new Uri(string.IsNullOrEmpty(_baseuri) ? "https://api.groq.com/openai/v1/" : _baseuri);
-            }
-
-            var result = new AnalyzeTicketResponse();
             try
             {
                 var prompt = BuildPrompt(analyzeRequest.Title, analyzeRequest.Description);
-                _logger.LogInformation("Sending prompt to Groq API: {Prompt}", prompt);
+                _logger.LogInformation("Sending ticket analysis request to Groq API.");
 
                 var requestBody = new
                 {
@@ -46,8 +38,7 @@ namespace AI_ticket_analyzer.Service
                     response_format = new { type = "json_object" }
                 };
 
-                var fullUri = new Uri(new Uri(string.IsNullOrWhiteSpace(_baseuri) ? "https://api.groq.com/openai/v1/" : _baseuri), "chat/completions");
-                var request = new HttpRequestMessage(HttpMethod.Post, fullUri);
+                var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
 
                 request.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(requestBody), System.Text.Encoding.UTF8, "application/json");
@@ -63,30 +54,80 @@ namespace AI_ticket_analyzer.Service
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
+                var content = ExtractAssistantContent(json);
+                var result = DeserializeAnalysisContent(content);
 
-                using var doc = JsonDocument.Parse(json);
-
-                var content = doc.RootElement
-                                .GetProperty("choices")[0]
-                                .GetProperty("message")
-                                .GetProperty("content")
-                                .GetString();
-
-                result = JsonSerializer.Deserialize<AnalyzeTicketResponse>(
-                    content!,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    }) ?? new AnalyzeTicketResponse();
-
-                _logger.LogInformation("Send response from groq to ai API: {response}", response);
+                _logger.LogInformation("Groq API response parsed successfully.");
 
                 return result;
+            }
+            catch (InvalidAiResponseException ex)
+            {
+                _logger.LogWarning(ex, "Groq API returned an invalid response.");
+                throw;
             }
             catch(Exception ex)
             {
                 _logger.LogError(ex, "Error analyzing ticket with Groq API.");
                 throw;
+            }
+        }
+
+        private static string ExtractAssistantContent(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+
+                if (!doc.RootElement.TryGetProperty("choices", out var choices) ||
+                    choices.ValueKind != JsonValueKind.Array ||
+                    choices.GetArrayLength() == 0)
+                {
+                    throw new InvalidAiResponseException("AI provider returned an invalid response.");
+                }
+
+                var firstChoice = choices[0];
+
+                if (!firstChoice.TryGetProperty("message", out var message) ||
+                    message.ValueKind != JsonValueKind.Object)
+                {
+                    throw new InvalidAiResponseException("AI provider returned an invalid response.");
+                }
+
+                if (!message.TryGetProperty("content", out var contentElement))
+                {
+                    throw new InvalidAiResponseException("AI provider returned an invalid response.");
+                }
+
+                var content = contentElement.GetString();
+
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    throw new InvalidAiResponseException("AI provider returned an empty response.");
+                }
+
+                return content;
+            }
+            catch (JsonException)
+            {
+                throw new InvalidAiResponseException("AI provider returned malformed JSON.");
+            }
+        }
+
+        private static AnalyzeTicketResponse DeserializeAnalysisContent(string content)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<AnalyzeTicketResponse>(
+                    content,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }) ?? throw new InvalidAiResponseException("AI provider returned an invalid analysis.");
+            }
+            catch (JsonException)
+            {
+                throw new InvalidAiResponseException("AI provider returned malformed analysis JSON.");
             }
         }
 

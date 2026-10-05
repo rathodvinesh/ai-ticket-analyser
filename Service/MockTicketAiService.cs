@@ -4,6 +4,12 @@ using AI_ticket_analyzer.Service;
 
 public class MockTicketAiService : ITicketService
 {
+    public Task<IReadOnlyList<TicketHistoryResponse>> GetRecentTicketsAsync()
+    {
+        IReadOnlyList<TicketHistoryResponse> tickets = Array.Empty<TicketHistoryResponse>();
+        return Task.FromResult(tickets);
+    }
+
     public Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest request)
     {
         var text = $"{request.Title} {request.Description}".ToLower();

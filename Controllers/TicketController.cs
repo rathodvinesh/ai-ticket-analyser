@@ -1,8 +1,6 @@
-using AI_ticket_analyzer.Data;
-using AI_ticket_analyzer.Models;
 using AI_ticket_analyzer.Models.DTO;
+using AI_ticket_analyzer.Service;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace AI_ticket_analyzer.Controllers
 {
@@ -10,31 +8,19 @@ namespace AI_ticket_analyzer.Controllers
     [ApiController]
     public class TicketController : ControllerBase
     {
-        private readonly Service.ITicketService _groqService;
-        private readonly AITicketAnalyzerDbContext _dbContext;
+        private readonly Service.ITicketService _ticketService;
 
-        public TicketController(Service.ITicketService groqService, AITicketAnalyzerDbContext dbContext)
+        public TicketController(Service.ITicketService ticketService)
         {
-            _groqService = groqService;
-            _dbContext = dbContext;
+            _ticketService = ticketService;
         }
 
-        [HttpGet]
+        [HttpGet("tickets")]
         public async Task<IActionResult> GetTickets()
         {
-            try
-            {
-                var tickets = await _dbContext.SupportTickets
-                    .OrderByDescending(t => t.CreatedAt)
-                    .Take(50)
-                    .ToListAsync();
+            var tickets = await _ticketService.GetRecentTicketsAsync();
 
-                return Ok(tickets);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"Error fetching tickets from database: {ex.Message}");
-            }
+            return Ok(tickets);
         }
 
         [HttpPost("analyze")]
@@ -55,9 +41,19 @@ namespace AI_ticket_analyzer.Controllers
                 return BadRequest("Description cannot exceed 5000 characters.");
             }
 
-            var result = await _groqService.AnalyzeTicketAsync(request);
+            try
+            {
+                var result = await _ticketService.AnalyzeTicketAsync(request);
 
-            return Ok(result);
+                return Ok(result);
+            }
+            catch (InvalidAiResponseException ex)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new
+                    {
+                        message = ex.Message
+                    });
+            }
             
         }
     }

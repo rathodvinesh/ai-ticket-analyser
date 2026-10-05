@@ -5,6 +5,7 @@ namespace AI_ticket_analyzer.Service
 {
     public interface ITicketService
     {
+        Task<IReadOnlyList<TicketHistoryResponse>> GetRecentTicketsAsync();
         Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest request);
     }
 }

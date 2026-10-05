@@ -1,12 +1,29 @@
 using AI_ticket_analyzer.Data;
 using AI_ticket_analyzer.Models;
 using AI_ticket_analyzer.Models.DTO;
-using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace AI_ticket_analyzer.Service
 {
     public class TicketService : ITicketService
     {
+        private static readonly string[] AllowedCategories =
+        {
+            "Billing",
+            "Login",
+            "Bug",
+            "Feature Request",
+            "Support",
+            "Other"
+        };
+
+        private static readonly string[] AllowedPriorities =
+        {
+            "Low",
+            "Medium",
+            "High"
+        };
+
         private readonly IAiClient _aiClient;
         private readonly AITicketAnalyzerDbContext _dbContext;
         private readonly ILogger<TicketService> _logger;
@@ -18,24 +35,29 @@ namespace AI_ticket_analyzer.Service
             _logger = logger;
         }
 
+        public async Task<IReadOnlyList<TicketHistoryResponse>> GetRecentTicketsAsync()
+        {
+            return await _dbContext.SupportTickets
+                .AsNoTracking()
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(50)
+                .Select(t => new TicketHistoryResponse
+                {
+                    Title = t.RawTitle,
+                    Description = t.RawDescription,
+                    Summary = t.Aisummary ?? string.Empty,
+                    Category = t.Aicategory ?? string.Empty,
+                    Priority = t.Aipriority ?? string.Empty,
+                    CreatedAt = t.CreatedAt
+                })
+                .ToListAsync();
+        }
+
         public async Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest analyzeRequest)
         {
-
-            var allowedCategories = new List<string> { "Billing", "Login", "Bug", "Feature Request", "Support", "Other" };
-
-            var allowedPriorities = new List<string> { "Low", "Medium", "High" };
-
             var response = await _aiClient.AnalyzeTicketAsync(analyzeRequest);
 
-            if (!allowedCategories.Contains(response.Category, StringComparer.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"Invalid category returned by AI: {response.Category}. Allowed categories are: {string.Join(", ", allowedCategories)}");
-            }
-
-            if (!allowedPriorities.Contains(response.Priority, StringComparer.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"Invalid priority returned by AI: {response.Priority}. Allowed priorities are: {string.Join(", ", allowedPriorities)}");
-            }
+            ValidateAiResponse(response);
 
             var ticket = new SupportTicket
             {
@@ -57,6 +79,37 @@ namespace AI_ticket_analyzer.Service
 
         }
 
-      
+        private static void ValidateAiResponse(AnalyzeTicketResponse response)
+        {
+            if (string.IsNullOrWhiteSpace(response.Summary))
+            {
+                throw new InvalidAiResponseException("AI response is invalid: summary is required.");
+            }
+
+            if (response.Summary.Length > 500)
+            {
+                throw new InvalidAiResponseException("AI response is invalid: summary is too long.");
+            }
+
+            if (string.IsNullOrWhiteSpace(response.Category))
+            {
+                throw new InvalidAiResponseException("AI response is invalid: category is required.");
+            }
+
+            if (!AllowedCategories.Contains(response.Category))
+            {
+                throw new InvalidAiResponseException("AI response is invalid: category is not supported.");
+            }
+
+            if (string.IsNullOrWhiteSpace(response.Priority))
+            {
+                throw new InvalidAiResponseException("AI response is invalid: priority is required.");
+            }
+
+            if (!AllowedPriorities.Contains(response.Priority))
+            {
+                throw new InvalidAiResponseException("AI response is invalid: priority is not supported.");
+            }
+        }
     }
 }

@@ -25,13 +25,17 @@ builder.Services.AddDbContext<AITicketAnalyzerDbContext>(options =>
 
 var useMockAi = builder.Configuration.GetValue<bool>("UseMockAi");
 
-if (useMockAi)
-{
+// Register TicketService always
+
+
+    // Use a lightweight in-memory AI client for local/dev
+if (useMockAi) { 
     builder.Services.AddScoped<ITicketService, MockTicketAiService>();
 }
 else
 {
     builder.Services.AddScoped<ITicketService, TicketService>();
+    // Register the HTTP-based Groq client as the IAiClient implementation
     builder.Services.AddHttpClient<IAiClient, GroqClient>(client =>
     {
         var baseUrl = builder.Configuration["GroqApi:BaseUrl"] ?? "https://api.groq.com/openai/v1/";

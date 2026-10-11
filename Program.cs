@@ -3,24 +3,14 @@ using AI_ticket_analyzer.Service;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddDbContext<AITicketAnalyzerDbContext>(options =>
 {
-    var connStr = builder.Configuration.GetConnectionString("DbString") ?? string.Empty;
-    if (connStr.Contains("postgres", StringComparison.OrdinalIgnoreCase) ||
-        connStr.Contains("Host=", StringComparison.OrdinalIgnoreCase) ||
-        connStr.Contains("sslmode", StringComparison.OrdinalIgnoreCase))
-    {
-        var formattedConnStr = ConvertPostgresUrlToConnectionString(connStr);
-        options.UseNpgsql(formattedConnStr);
-    }
-    else
-    {
-        options.UseSqlServer(connStr);
-    }
+   options.UseSqlServer(builder.Configuration.GetConnectionString("DbString"));
 });
 
 var useMockAi = builder.Configuration.GetValue<bool>("UseMockAi");
@@ -41,6 +31,8 @@ else
         var baseUrl = builder.Configuration["GroqApi:BaseUrl"] ?? "https://api.groq.com/openai/v1/";
         client.BaseAddress = new Uri(baseUrl);
         client.DefaultRequestHeaders.Add("Accept", "application/json");
+
+        client.Timeout = TimeSpan.FromSeconds(30); // Set a timeout for the HTTP requests
     });
 }
 
@@ -61,6 +53,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.Information()
+        .WriteTo.Console()
+        .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
+        .CreateLogger();
+
+builder.Host.UseSerilog();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -79,56 +80,43 @@ app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exceptionFeature =
+            context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+
+        var exception = exceptionFeature?.Error;
+
+        context.Response.ContentType = "application/problem+json";
+
+        if (exception is TimeoutException)
+        {
+            context.Response.StatusCode = StatusCodes.Status504GatewayTimeout;
+
+            await context.Response.WriteAsJsonAsync(new
+            {
+                status = 504,
+                title = "Gateway Timeout",
+                detail = "The AI service took too long to respond."
+            });
+        }
+        else
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+
+            await context.Response.WriteAsJsonAsync(new
+            {
+                status = 500,
+                title = "Internal Server Error",
+                detail = "An unexpected error occurred."
+            });
+        }
+    });
+});
+
 app.MapControllers();
 app.MapFallbackToFile("index.html");
 
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AITicketAnalyzerDbContext>();
-        var dbCreator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
-        if (dbCreator != null)
-        {
-            if (!dbCreator.Exists())
-            {
-                dbCreator.Create();
-            }
-            if (!dbCreator.HasTables())
-            {
-                dbCreator.CreateTables();
-            }
-        }
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"DB Auto-Init Note: {ex.Message}");
-    }
-}
-
 app.Run();
-
-static string ConvertPostgresUrlToConnectionString(string url)
-{
-    if (url.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
-        url.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
-    {
-        try
-        {
-            var uri = new Uri(url);
-            var userInfo = uri.UserInfo.Split(':');
-            var username = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : "";
-            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
-            var host = uri.Host;
-            var port = uri.Port > 0 ? uri.Port : 5432;
-            var database = uri.AbsolutePath.TrimStart('/');
-
-            return $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;";
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Postgres URL parse warning: {ex.Message}");
-        }
-    }
-    return url;
-}

@@ -43,6 +43,12 @@ namespace AI_ticket_analyzer.Service
 
                 request.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(requestBody), System.Text.Encoding.UTF8, "application/json");
 
+                _logger.LogInformation(
+                        "Calling Groq. Configured HTTP timeout: {Timeout}",
+                        httpClient.Timeout);
+
+                //await Task.Delay(TimeSpan.FromSeconds(3));
+
                 var response = await httpClient.SendAsync(request);
                 _logger.LogInformation("Received response from Groq API: {response}", response);
 
@@ -60,6 +66,11 @@ namespace AI_ticket_analyzer.Service
                 _logger.LogInformation("Groq API response parsed successfully.");
 
                 return result;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, "Request to Groq API timed out.");
+                throw new TimeoutException("Request to Groq API timed out.");
             }
             catch (InvalidAiResponseException ex)
             {

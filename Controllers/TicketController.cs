@@ -8,53 +8,41 @@ namespace AI_ticket_analyzer.Controllers
     [ApiController]
     public class TicketController : ControllerBase
     {
-        private readonly Service.ITicketService _ticketService;
+        private readonly ITicketService _ticketService;
 
-        public TicketController(Service.ITicketService ticketService)
+        public TicketController(ITicketService ticketService)
         {
             _ticketService = ticketService;
         }
 
+        [HttpGet]
         [HttpGet("tickets")]
-        public async Task<IActionResult> GetTickets()
+        public async Task<IActionResult> GetTickets(CancellationToken cancellationToken)
         {
-            var tickets = await _ticketService.GetRecentTicketsAsync();
-
+            var tickets = await _ticketService.GetRecentTicketsAsync(cancellationToken);
             return Ok(tickets);
         }
 
         [HttpPost("analyze")]
-        public async Task<IActionResult> AnalyzeTicket([FromBody] AnalyzeTicketRequest request)
+        public async Task<IActionResult> AnalyzeTicket([FromBody] AnalyzeTicketRequest request, CancellationToken cancellationToken)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Description))
             {
                 return BadRequest("Title and Description are required.");
             }
 
-            if(request.Title.Length > 200)
+            if (request.Title.Length > 200)
             {
                 return BadRequest("Title cannot exceed 200 characters.");
             }
 
-            if(request.Description.Length > 5000)
+            if (request.Description.Length > 5000)
             {
                 return BadRequest("Description cannot exceed 5000 characters.");
             }
 
-            try
-            {
-                var result = await _ticketService.AnalyzeTicketAsync(request);
-
-                return Ok(result);
-            }
-            catch (InvalidAiResponseException ex)
-            {
-                return StatusCode(StatusCodes.Status502BadGateway, new
-                    {
-                        message = ex.Message
-                    });
-            }
-            
+            var result = await _ticketService.AnalyzeTicketAsync(request, cancellationToken);
+            return Ok(result);
         }
     }
 }

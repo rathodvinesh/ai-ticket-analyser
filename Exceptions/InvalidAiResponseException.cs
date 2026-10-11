@@ -1,4 +1,4 @@
-namespace AI_ticket_analyzer.Service
+namespace AI_ticket_analyzer.Exceptions
 {
     public sealed class InvalidAiResponseException : Exception
     {

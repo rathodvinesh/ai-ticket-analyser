@@ -1,122 +1,94 @@
 using AI_ticket_analyzer.Data;
+using AI_ticket_analyzer.Middleware;
 using AI_ticket_analyzer.Service;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
-using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddDbContext<AITicketAnalyzerDbContext>(options =>
 {
-   options.UseSqlServer(builder.Configuration.GetConnectionString("DbString"));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DbString"));
 });
 
 var useMockAi = builder.Configuration.GetValue<bool>("UseMockAi");
 
-// Register TicketService always
+// Always register TicketService as ITicketService so domain logic & persistence remain consistent
+builder.Services.AddScoped<ITicketService, TicketService>();
 
-
-    // Use a lightweight in-memory AI client for local/dev
-if (useMockAi) { 
-    builder.Services.AddScoped<ITicketService, MockTicketAiService>();
+// Register AI Client based on configuration
+if (useMockAi)
+{
+    builder.Services.AddScoped<IAiClient, MockAiClient>();
 }
 else
 {
-    builder.Services.AddScoped<ITicketService, TicketService>();
-    // Register the HTTP-based Groq client as the IAiClient implementation
     builder.Services.AddHttpClient<IAiClient, GroqClient>(client =>
     {
         var baseUrl = builder.Configuration["GroqApi:BaseUrl"] ?? "https://api.groq.com/openai/v1/";
         client.BaseAddress = new Uri(baseUrl);
         client.DefaultRequestHeaders.Add("Accept", "application/json");
-
-        client.Timeout = TimeSpan.FromSeconds(30); // Set a timeout for the HTTP requests
-    });
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .AddStandardResilienceHandler();
 }
 
-
-// Add CORS policy
+// Configure CORS
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
+        else
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
     });
 });
 
+// Health Checks
+builder.Services.AddHealthChecks();
+
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure Serilog
-Log.Logger = new LoggerConfiguration()
-        .MinimumLevel.Information()
-        .WriteTo.Console()
-        .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
-        .CreateLogger();
-
-builder.Host.UseSerilog();
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// 1. Global Exception Handling Middleware (must be first in pipeline)
+app.UseGlobalExceptionHandler();
+
+// 2. Swagger documentation for development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// 3. CORS
 app.UseCors("AllowAll");
 
+// 4. Static Files
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// 5. Security & Routing
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
 
-app.UseExceptionHandler(errorApp =>
-{
-    errorApp.Run(async context =>
-    {
-        var exceptionFeature =
-            context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
-
-        var exception = exceptionFeature?.Error;
-
-        context.Response.ContentType = "application/problem+json";
-
-        if (exception is TimeoutException)
-        {
-            context.Response.StatusCode = StatusCodes.Status504GatewayTimeout;
-
-            await context.Response.WriteAsJsonAsync(new
-            {
-                status = 504,
-                title = "Gateway Timeout",
-                detail = "The AI service took too long to respond."
-            });
-        }
-        else
-        {
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-
-            await context.Response.WriteAsJsonAsync(new
-            {
-                status = 500,
-                title = "Internal Server Error",
-                detail = "An unexpected error occurred."
-            });
-        }
-    });
-});
-
+// 6. Endpoints
+app.MapHealthChecks("/health");
 app.MapControllers();
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+public partial class Program { }

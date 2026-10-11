@@ -1,4 +1,5 @@
 using AI_ticket_analyzer.Data;
+using AI_ticket_analyzer.Exceptions;
 using AI_ticket_analyzer.Models;
 using AI_ticket_analyzer.Models.DTO;
 using Microsoft.EntityFrameworkCore;
@@ -35,7 +36,7 @@ namespace AI_ticket_analyzer.Service
             _logger = logger;
         }
 
-        public async Task<IReadOnlyList<TicketHistoryResponse>> GetRecentTicketsAsync()
+        public async Task<IReadOnlyList<TicketHistoryResponse>> GetRecentTicketsAsync(CancellationToken cancellationToken = default)
         {
             return await _dbContext.SupportTickets
                 .AsNoTracking()
@@ -50,12 +51,12 @@ namespace AI_ticket_analyzer.Service
                     Priority = t.Aipriority ?? string.Empty,
                     CreatedAt = t.CreatedAt
                 })
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest analyzeRequest)
+        public async Task<AnalyzeTicketResponse> AnalyzeTicketAsync(AnalyzeTicketRequest analyzeRequest, CancellationToken cancellationToken = default)
         {
-            var response = await _aiClient.AnalyzeTicketAsync(analyzeRequest);
+            var response = await _aiClient.AnalyzeTicketAsync(analyzeRequest, cancellationToken);
 
             ValidateAiResponse(response);
 
@@ -71,16 +72,20 @@ namespace AI_ticket_analyzer.Service
             };
 
             _dbContext.SupportTickets.Add(ticket);
-            await _dbContext.SaveChangesAsync();
+            await _dbContext.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Analyzed ticket saved to database");
-                
-            return response;
 
+            return response;
         }
 
-        private static void ValidateAiResponse(AnalyzeTicketResponse response)
+        public static void ValidateAiResponse(AnalyzeTicketResponse response)
         {
+            if (response == null)
+            {
+                throw new InvalidAiResponseException("AI response cannot be null.");
+            }
+
             if (string.IsNullOrWhiteSpace(response.Summary))
             {
                 throw new InvalidAiResponseException("AI response is invalid: summary is required.");
